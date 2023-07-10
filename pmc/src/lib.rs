@@ -3,8 +3,8 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
 
-mod serde;
-use serde::*;
+mod tab_serde;
+use tab_serde::*;
 
 #[derive(Debug)]
 struct MLP {
