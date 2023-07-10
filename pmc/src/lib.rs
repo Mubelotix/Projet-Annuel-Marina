@@ -3,10 +3,15 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
 
+#[derive(Debug)]
 struct MLP {
+    /// Nombre de couches cachées
     L: usize,
+    /// Nombre de neurones
     d: Vec<usize>,
+    /// Weights of the network
     W: Vec<Vec<Vec<f32>>>,
+    /// Matrices d'activation
     X: Vec<Vec<f32>>,
     deltas: Vec<Vec<f32>>,
 }
@@ -147,75 +152,44 @@ extern "C" fn propagate(mlp: &mut MLP, inputs: &[f32], is_classification: bool) 
 
 #[no_mangle]
 extern "C" fn load_model() -> Option<Box<MLP>> {
-    if let Ok(mut file) = File::open("model.txt") {
-        let mut mlp = MLP {
-            L: 0,
-            d: Vec::new(),
-            W: Vec::new(),
-            X: Vec::new(),
-            deltas: Vec::new(),
-        };
-
-        let mut reader = BufReader::new(&mut file);
-
-        if let Some(Ok(line)) = reader.lines().next() {
-            if let Ok(L) = line.parse() {
-                mlp.L = L;
-            } else {
-                println!("Erreur lors de la lecture de la valeur L.");
-                return None;
-            }
-        } else {
-            println!("Erreur lors de la lecture de la valeur L.");
+    let mut file = match File::open("model.txt") {
+        Ok(file) => file,
+        Err(e) => {
+            println!("Erreur lors de l'ouverture du fichier model.txt : {}", e);
             return None;
         }
+    };
 
-        let mut position = reader.seek(SeekFrom::Current(0)).unwrap();
+    let reader = BufReader::new(&mut file);
+    let mut lines = reader.lines();
 
-        for line in reader.lines().take(mlp.L + 1) {
-            if let Ok(line) = line {
-                let values: Vec<usize> = line
-                    .split_whitespace()
-                    .map(|s| s.parse().unwrap())
-                    .collect();
-                mlp.d.extend(values);
-            } else {
-                println!("Erreur lors de la lecture de la valeur d.");
-                return None;
-            }
+    let L: usize = lines
+        .next().expect("Valeur L manquante.").unwrap()
+        .parse().expect("L doit être un nombre.");
+
+    let d: Vec<usize> = lines
+        .next().expect("Valeur D manquante.").unwrap()
+        .split_whitespace()
+        .map(|s| s.parse().expect("Les valeurs dans D doivent être des nombres"))
+        .collect();
+
+    let mut W = vec![Vec::new(); L];
+    for i in 0..L {
+        for _ in 0..d[i + 1] {
+            let line = lines.next().expect("Valeur W manquante.").unwrap();
+            let weights: Vec<f32> = line.split_whitespace()
+                .map(|s| s.parse().expect("Les valeurs dans W doivent être des flottants"))
+                .collect();
+            W[i].push(weights);
         }
-
-        reader.seek(SeekFrom::Start(position)).unwrap();
-
-        mlp.W = vec![Vec::new(); mlp.L];
-        mlp.X = vec![Vec::new(); mlp.L + 1];
-        mlp.deltas = vec![Vec::new(); mlp.L];
-
-        for i in 0..mlp.L {
-            for line in reader.lines().take(mlp.d[i + 1]) {
-                if let Ok(line) = line {
-                    let weights: Vec<f32> = line
-                        .split_whitespace()
-                        .map(|s| s.parse().unwrap())
-                        .collect();
-                    mlp.W[i].push(weights);
-                } else {
-                    println!("Erreur lors de la lecture des poids.");
-                    return None;
-                }
-            }
-            position = reader.seek(SeekFrom::Current(0)).unwrap();
-        }
-
-        for i in 0..=mlp.L {
-            mlp.X[i] = vec![0.0; mlp.d[i] + 1];
-        }
-
-        return Some(Box::new(mlp));
-    } else {
-        println!("Erreur lors de l'ouverture du fichier model.txt");
-        return None;
     }
+
+    let mut X = vec![Vec::new(); L + 1];
+    for i in 0..=L {
+        X[i] = vec![0.0; d[i] + 1];
+    }
+
+    Some(Box::new(MLP { L, d, W, X, deltas: vec![Vec::new(); L] }))
 }
 
 #[no_mangle]
@@ -242,4 +216,11 @@ extern "C" fn save_model(mlp: &MLP) {
     } else {
         println!("Erreur lors de l'ouverture du fichier model.txt");
     }
+}
+
+
+#[test]
+fn test_load_model() {
+    let model = load_model().unwrap();
+    println!("{:?}", model.d);
 }
