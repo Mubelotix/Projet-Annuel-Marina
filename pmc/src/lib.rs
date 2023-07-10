@@ -3,6 +3,9 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::io::Write;
 
+mod serde;
+use serde::*;
+
 #[derive(Debug)]
 struct MLP {
     /// Nombre de couches cachées
@@ -222,5 +225,6 @@ extern "C" fn save_model(mlp: &MLP) {
 #[test]
 fn test_load_model() {
     let model = load_model().unwrap();
+    save_model(&model);
     println!("{:?}", model.d);
 }
